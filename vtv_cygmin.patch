@@ -1,0 +1,1105 @@
+Index: gcc/config/i386/cygwin.h
+===================================================================
+--- gcc/config/i386/cygwin.h	(Revision 214408)
++++ gcc/config/i386/cygwin.h	(Arbeitskopie)
+@@ -41,12 +41,18 @@ along with GCC; see the file COPYING3.
+ #define STARTFILE_SPEC "\
+   %{!shared: %{!mdll: crt0%O%s \
+   %{pg:gcrt0%O%s}}}\
+-  %{shared:crtbeginS.o%s;:crtbegin.o%s}"
++  %{shared:crtbeginS.o%s;:crtbegin.o%s} \
++  %{fvtable-verify=none:%s; \
++    fvtable-verify=preinit:vtv_start.o%s; \
++    fvtable-verify=std:vtv_start.o%s}"
+ 
+ #undef ENDFILE_SPEC
+ #define ENDFILE_SPEC \
+   "%{Ofast|ffast-math|funsafe-math-optimizations:crtfastmath.o%s}\
+    %{!shared:%:if-exists(default-manifest.o%s)}\
++   %{fvtable-verify=none:%s; \
++    fvtable-verify=preinit:vtv_end.o%s; \
++    fvtable-verify=std:vtv_end.o%s} \
+    crtend.o%s"
+ 
+ /* Normally, -lgcc is not needed since everything in it is in the DLL, but we
+@@ -81,6 +87,8 @@ along with GCC; see the file COPYING3.
+   %{pthread: } \
+   -lcygwin \
+   %{mwindows:-lgdi32 -lcomdlg32} \
++  %{fvtable-verify=preinit:-lvtv -lpsapi; \
++    fvtable-verify=std:-lvtv -lpsapi} \
+   -ladvapi32 -lshell32 -luser32 -lkernel32"
+ 
+ /* To implement C++ function replacement we always wrap the cxx
+Index: gcc/config/i386/mingw-w64.h
+===================================================================
+--- gcc/config/i386/mingw-w64.h	(Revision 214408)
++++ gcc/config/i386/mingw-w64.h	(Arbeitskopie)
+@@ -32,7 +32,10 @@ along with GCC; see the file COPYING3.
+   %{!shared:%{!mdll:%{!municode:crt2%O%s}}} \
+   %{!shared:%{!mdll:%{municode:crt2u%O%s}}} \
+   %{pg:gcrt2%O%s} \
+-  crtbegin.o%s"
++  crtbegin.o%s \
++  %{fvtable-verify=none:%s; \
++    fvtable-verify=preinit:vtv_start.o%s; \
++    fvtable-verify=std:vtv_start.o%s}"
+ 
+ /* Enable multilib.  */
+ 
+@@ -43,6 +46,8 @@ along with GCC; see the file COPYING3.
+ #define LIB_SPEC "%{pg:-lgmon} %{" SPEC_PTHREAD1 ":-lpthread} " \
+ 		 "%{" SPEC_PTHREAD2 ": } " \
+ 		 "%{mwindows:-lgdi32 -lcomdlg32} " \
++     "%{fvtable-verify=preinit:-lvtv -lpsapi; \
++        fvtable-verify=std:-lvtv -lpsapi} " \
+ 		 "-ladvapi32 -lshell32 -luser32 -lkernel32"
+ 
+ #undef SPEC_32
+Index: gcc/config/i386/mingw32.h
+===================================================================
+--- gcc/config/i386/mingw32.h	(Revision 214408)
++++ gcc/config/i386/mingw32.h	(Arbeitskopie)
+@@ -91,6 +91,8 @@ along with GCC; see the file COPYING3.
+ #define LIB_SPEC "%{pg:-lgmon} %{" SPEC_PTHREAD1 ":-lpthread} " \
+ 		 "%{" SPEC_PTHREAD2 ": } " \
+ 		 "%{mwindows:-lgdi32 -lcomdlg32} " \
++     "%{fvtable-verify=preinit:-lvtv -lpsapi; \
++        fvtable-verify=std:-lvtv -lpsapi} " \
+                  "-ladvapi32 -lshell32 -luser32 -lkernel32"
+ 
+ /* Weak symbols do not get resolved if using a Windows dll import lib.
+@@ -143,12 +145,18 @@ along with GCC; see the file COPYING3.
+ #undef STARTFILE_SPEC
+ #define STARTFILE_SPEC "%{shared|mdll:dllcrt2%O%s} \
+   %{!shared:%{!mdll:crt2%O%s}} %{pg:gcrt2%O%s} \
+-  crtbegin.o%s"
++  crtbegin.o%s \
++  %{fvtable-verify=none:%s; \
++    fvtable-verify=preinit:vtv_start.o%s; \
++    fvtable-verify=std:vtv_start.o%s}"
+ 
+ #undef ENDFILE_SPEC
+ #define ENDFILE_SPEC \
+   "%{Ofast|ffast-math|funsafe-math-optimizations:crtfastmath.o%s} \
+    %{!shared:%:if-exists(default-manifest.o%s)}\
++   %{fvtable-verify=none:%s; \
++    fvtable-verify=preinit:vtv_end.o%s; \
++    fvtable-verify=std:vtv_end.o%s} \
+   crtend.o%s"
+ 
+ /* Override startfile prefix defaults.  */
+Index: gcc/cp/vtable-class-hierarchy.c
+===================================================================
+--- gcc/cp/vtable-class-hierarchy.c	(Revision 214408)
++++ gcc/cp/vtable-class-hierarchy.c	(Arbeitskopie)
+@@ -1182,7 +1182,11 @@ vtv_generate_init_routine (void)
+       TREE_STATIC (vtv_fndecl) = 1;
+       TREE_USED (vtv_fndecl) = 1;
+       DECL_PRESERVE_P (vtv_fndecl) = 1;
++#if defined (TARGET_PECOFF)
++      if (flag_vtable_verify == VTV_PREINIT_PRIORITY && !TARGET_PECOFF)
++#else
+       if (flag_vtable_verify == VTV_PREINIT_PRIORITY)
++#endif
+         DECL_STATIC_CONSTRUCTOR (vtv_fndecl) = 0;
+ 
+       gimplify_function_tree (vtv_fndecl);
+@@ -1190,7 +1194,11 @@ vtv_generate_init_routine (void)
+ 
+       cgraph_process_new_functions ();
+ 
++#if defined (TARGET_PECOFF)
++      if (flag_vtable_verify == VTV_PREINIT_PRIORITY && !TARGET_PECOFF)
++#else
+       if (flag_vtable_verify == VTV_PREINIT_PRIORITY)
++#endif
+         assemble_vtv_preinit_initializer (vtv_fndecl);
+ 
+     }
+Index: gcc/varasm.c
+===================================================================
+--- gcc/varasm.c	(Revision 214408)
++++ gcc/varasm.c	(Arbeitskopie)
+@@ -2164,7 +2164,34 @@ assemble_variable (tree decl, int top_le
+ 				         | SECTION_LINKONCE,
+ 			    	         DECL_NAME (decl));
+           in_section = sect;
+-#else
++#elif defined (TARGET_PECOFF)
++          /* Neither OBJECT_FORMAT_PE, nor OBJECT_FORMAT_COFF is set here.
++             Therefore the following check is used.
++             In case a the target is PE or COFF a comdat group section
++             is created, e.g. .vtable_map_vars$foo. The linker places
++             everything in .vtable_map_vars at the end.
++
++             A fix could be made in
++             gcc/config/i386/winnt.c: i386_pe_unique_section. */
++          if (TARGET_PECOFF)
++          {
++            char *name;
++            
++            if (TREE_CODE (DECL_NAME (decl)) == IDENTIFIER_NODE)
++              name = ACONCAT ((sect->named.name, "$",
++                               IDENTIFIER_POINTER (DECL_NAME (decl)), NULL));
++            else
++              name = ACONCAT ((sect->named.name, "$",
++                    IDENTIFIER_POINTER (DECL_COMDAT_GROUP (DECL_NAME (decl))),
++                    NULL));
++
++            targetm.asm_out.named_section (name,
++                                           sect->named.common.flags
++                                           | SECTION_LINKONCE,
++                                           DECL_NAME (decl));
++            in_section = sect;
++        }
++        else
+           switch_to_section (sect);
+ #endif
+         }
+Index: libgcc/Makefile.in
+===================================================================
+--- libgcc/Makefile.in	(Revision 214408)
++++ libgcc/Makefile.in	(Arbeitskopie)
+@@ -986,6 +986,7 @@ crtendS$(objext): $(srcdir)/crtstuff.c
+ # This is a version of crtbegin for -static links.
+ crtbeginT$(objext): $(srcdir)/crtstuff.c
+ 	$(crt_compile) $(CRTSTUFF_T_CFLAGS) -c $< -DCRT_BEGIN -DCRTSTUFFT_O
++endif
+ 
+ ifeq ($(enable_vtable_verify),yes)
+ # These are used in vtable verification; see comments in source files for
+@@ -1002,7 +1003,6 @@ vtv_start_preinit$(objext): $(srcdir)/vt
+ vtv_end_preinit$(objext): $(srcdir)/vtv_end_preinit.c
+ 	$(crt_compile) $(CRTSTUFF_T_CFLAGS_S) -c $(srcdir)/vtv_end_preinit.c
+ endif
+-endif
+ 
+ ifeq ($(CUSTOM_CRTIN),)
+ # -x assembler-with-cpp is only needed on case-insensitive filesystem.
+Index: libgcc/config.host
+===================================================================
+--- libgcc/config.host	(Revision 214408)
++++ libgcc/config.host	(Arbeitskopie)
+@@ -615,6 +615,9 @@ i[4567]86-wrs-vxworks|i[4567]86-wrs-vxwo
+ 	;;
+ i[34567]86-*-cygwin*)
+ 	extra_parts="crtbegin.o crtbeginS.o crtend.o crtfastmath.o"
++	if test x$enable_vtable_verify = xyes; then
++		extra_parts="$extra_parts vtv_start.o vtv_end.o vtv_start_preinit.o vtv_end_preinit.o"
++	fi
+ 	# This has to match the logic for DWARF2_UNWIND_INFO in gcc/config/i386/cygming.h
+ 	if test x$enable_sjlj_exceptions = xyes; then
+ 		tmake_eh_file="i386/t-sjlj-eh"
+@@ -631,6 +634,9 @@ i[34567]86-*-cygwin*)
+ 	;;
+ x86_64-*-cygwin*)
+ 	extra_parts="crtbegin.o crtbeginS.o crtend.o crtfastmath.o"
++	if test x$enable_vtable_verify = xyes; then
++		extra_parts="$extra_parts vtv_start.o vtv_end.o vtv_start_preinit.o vtv_end_preinit.o"
++	fi
+ 	# This has to match the logic for DWARF2_UNWIND_INFO in gcc/config/i386/cygming.h
+ 	if test x$enable_sjlj_exceptions = xyes; then
+ 		tmake_eh_file="i386/t-sjlj-eh"
+@@ -648,6 +654,9 @@ x86_64-*-cygwin*)
+ 	;;
+ i[34567]86-*-mingw*)
+ 	extra_parts="crtbegin.o crtend.o crtfastmath.o"
++	if test x$enable_vtable_verify = xyes; then
++		extra_parts="$extra_parts vtv_start.o vtv_end.o vtv_start_preinit.o vtv_end_preinit.o"
++	fi
+ 	case ${target_thread_file} in
+ 	  win32)
+ 	    tmake_file="$tmake_file i386/t-gthr-win32"
+@@ -694,6 +703,9 @@ x86_64-*-mingw*)
+ 	fi
+ 	tmake_file="${tmake_file} ${tmake_eh_file} ${tmake_dlldir_file} i386/t-slibgcc-cygming i386/t-mingw32 t-dfprules i386/t-crtfm i386/t-chkstk"
+ 	extra_parts="$extra_parts crtfastmath.o"
++	if test x$enable_vtable_verify = xyes; then
++		extra_parts="$extra_parts vtv_start.o vtv_end.o vtv_start_preinit.o vtv_end_preinit.o"
++	fi
+ 	;;
+ i[34567]86-*-interix[3-9]*)
+ 	tmake_file="$tmake_file i386/t-interix i386/t-chkstk"
+Index: libstdc++-v3/acinclude.m4
+===================================================================
+--- libstdc++-v3/acinclude.m4	(Revision 214408)
++++ libstdc++-v3/acinclude.m4	(Arbeitskopie)
+@@ -2321,7 +2321,17 @@ AC_DEFUN([GLIBCXX_ENABLE_VTABLE_VERIFY],
+   AC_MSG_RESULT([$enable_vtable_verify])
+ 
+   if test $enable_vtable_verify = yes; then
+-    VTV_CXXFLAGS="-fvtable-verify=std -Wl,-u_vtable_map_vars_start,-u_vtable_map_vars_end"
++    case ${target_os} in
++      cygwin*|mingw32*)
++        VTV_CXXFLAGS="-fvtable-verify=std -Wl,-lvtv,-u_vtable_map_vars_start,-u_vtable_map_vars_end"
++        vtv_cygmin="yes"
++        ;;
++      *)
++        VTV_CXXFLAGS="-fvtable-verify=std -Wl,-u_vtable_map_vars_start,-u_vtable_map_vars_end"
++        vtv_cygmin="no"
++        ;;
++    esac
++    AM_CONDITIONAL(VTV_CYGMIN, test $vtv_cygmin = yes)
+     VTV_PCH_CXXFLAGS="-fvtable-verify=std"
+     VTV_CXXLINKFLAGS="-L${toplevel_builddir}/libvtv/.libs -Wl,--rpath -Wl,${toplevel_builddir}/libvtv/.libs"		
+   else
+Index: libstdc++-v3/libsupc++/Makefile.am
+===================================================================
+--- libstdc++-v3/libsupc++/Makefile.am	(Revision 214408)
++++ libstdc++-v3/libsupc++/Makefile.am	(Arbeitskopie)
+@@ -98,9 +98,11 @@ sources = \
+ 	vterminate.cc
+ 
+ if ENABLE_VTABLE_VERIFY
++if !VTV_CYGMIN
+   vtv_sources = \
+ 	vtv_stubs.cc
+ endif
++endif
+ 
+ libsupc___la_SOURCES = $(sources) $(c_sources) $(vtv_sources)
+ libsupc__convenience_la_SOURCES = $(sources) $(c_sources) $(vtv_sources)
+Index: libstdc++-v3/libsupc++/vtv_stubs.cc
+===================================================================
+--- libstdc++-v3/libsupc++/vtv_stubs.cc	(Revision 214408)
++++ libstdc++-v3/libsupc++/vtv_stubs.cc	(Arbeitskopie)
+@@ -37,6 +37,39 @@
+ 
+ #include <cstddef>
+ 
++/* weak symbols on Windows work differently than on Linux. To be able
++   to switch vtv on and off on Windows two dlls are built. One with
++   the sources from libvtv, the other from these stubs. Depending on
++   which dll is placed in the folder of the executable the functions
++   from libvtv or the stubs functions are used. */
++#if defined (__CYGWIN__) || defined (__MINGW32__)
++extern "C"
++void
++__VLTChangePermission(int);
++
++void
++__VLTRegisterSet(void**, const void*, std::size_t, std::size_t,
++		 void**);
++
++void
++__VLTRegisterPair(void**, const void*, std::size_t,
++		  const void*);
++
++const void*
++__VLTVerifyVtablePointer(void**, const void*);
++
++void
++__VLTRegisterSetDebug(void**, const void*, std::size_t, std::size_t,
++		      void**);
++
++void
++__VLTRegisterPairDebug(void**, const void*, std::size_t, const void*,
++		       const char*, const char*);
++
++const void*
++__VLTVerifyVtablePointerDebug(void**, const void*, const char*,
++			      const char*);
++#else
+ // Declare as weak for libsupc++, strong definitions are in libvtv.
+ #if __GXX_WEAK__
+ extern "C"
+@@ -66,6 +99,7 @@ const void*
+ __VLTVerifyVtablePointerDebug(void**, const void*, const char*,
+ 			      const char*) __attribute__((weak));
+ #endif
++#endif
+ 
+ // Stub definitions.
+ extern "C"
+Index: libstdc++-v3/src/Makefile.am
+===================================================================
+--- libstdc++-v3/src/Makefile.am	(Revision 214408)
++++ libstdc++-v3/src/Makefile.am	(Arbeitskopie)
+@@ -25,7 +25,30 @@ include $(top_srcdir)/fragment.am
+ SUBDIRS = c++98 c++11
+ 
+ # Cross compiler support.
++if VTV_CYGMIN
++toolexeclib_LTLIBRARIES = libvtv.la libstdc++.la
++else
+ toolexeclib_LTLIBRARIES = libstdc++.la
++endif
++
++if VTV_CYGMIN
++vtv_stubs.cc:
++	rm -f $@
++	$(LN_S) $(toplevel_srcdir)/libstdc++-v3/libsupc++/vtv_stubs.cc $@
++
++libvtv_la_SOURCES = vtv_stubs.cc
++libvtv_la_LDFLAGS = $(lt_host_flags)
++
++libvtv_la_AM_CXXFLAGS = \
++	$(glibcxx_compiler_pic_flag) \
++	$(XTEMPLATE_FLAGS) \
++	-Wl,-u_vtable_map_vars_start,-u_vtable_map_vars_end \
++	$(WARN_CXXFLAGS) $(OPTIMIZE_CXXFLAGS) $(CONFIG_CXXFLAGS)
++
++libvtv_la_LINK = $(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) \
++	$(LIBTOOLFLAGS) --mode=link $(CXXLD) $(libvtv_la_AM_CXXFLAGS) \
++	$(CXXFLAGS) $(libvtv_la_LDFLAGS) $(LDFLAGS) -o $@
++endif
+ 
+ vpath % $(top_srcdir)/src/c++98
+ vpath % $(top_srcdir)/src/c++11
+Index: libvtv/Makefile.am
+===================================================================
+--- libvtv/Makefile.am	(Revision 214408)
++++ libvtv/Makefile.am	(Arbeitskopie)
+@@ -38,7 +38,11 @@ AM_CXXFLAGS = $(XCFLAGS)
+ AM_CXXFLAGS += $(LIBSTDCXX_RAW_CXX_CXXFLAGS)
+ AM_CXXFLAGS += -Wl,-u_vtable_map_vars_start,-u_vtable_map_vars_end
+ 
+-toolexeclib_LTLIBRARIES = libvtv.la
++if VTV_CYGMIN
++  toolexeclib_LTLIBRARIES = libvtv.la libvtv_stubs.la
++else
++  toolexeclib_LTLIBRARIES = libvtv.la
++endif
+ 
+ vtv_headers = \
+ 	vtv_map.h \
+@@ -55,6 +59,11 @@ vtv_sources = \
+         vtv_utils.cc \
+ 	vtv_end.c
+ 
++vtv_stubs_sources = \
++	vtv_start.c \
++	vtv_stubs.cc \
++	vtv_end.c
++
+ libvtv_includedir = $(libdir)/gcc/$(target_alias)/$(gcc_version)/include
+ 
+ # Link in vtv_start and vtv_end. 
+@@ -67,8 +76,29 @@ vtv_end.c:
+ 	rm -f $@
+ 	$(LN_S) $(toplevel_srcdir)/libgcc/vtv_end.c $@
+ 
++if VTV_CYGMIN
++  obstack.c:
++	  rm -f $@
++	  $(LN_S) $(toplevel_srcdir)/libiberty/obstack.c $@
++  
++  vtv_stubs.cc:
++	  rm -f $@
++	  $(LN_S) $(toplevel_srcdir)/libstdc++-v3/libsupc++/vtv_stubs.cc $@
++endif
++
++if VTV_CYGMIN
++  libvtv_la_LIBADD = -lpsapi
++  libvtv_la_LDFLAGS = $(lt_host_flags)
++  libvtv_stubs_la_LDFLAGS = $(lt_host_flags)
++endif
++
+ if ENABLE_VTABLE_VERIFY
++if VTV_CYGMIN
++  libvtv_la_SOURCES = $(vtv_sources) obstack.c
++  libvtv_stubs_la_SOURCES = $(vtv_stubs_sources)
++else
+   libvtv_la_SOURCES = $(vtv_sources)
++endif
+   libvtv_include_HEADERS = $(vtv_headers)
+ else
+   libvtv_la_SOURCES =
+@@ -78,6 +108,8 @@ endif
+ # Least ordering for dependencies mean linking w/o libstdc++ for as
+ # long as the development of libvtv does not absolutely require it.
+ CXXVTV=$(CC_FOR_TARGET)
++CXXLD=$(CC_FOR_TARGET)
++
+ LTCXXCOMPILE = $(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
+ 	--mode=compile $(CXXVTV) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
+ 	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS)
+Index: libvtv/configure.ac
+===================================================================
+--- libvtv/configure.ac	(Revision 214408)
++++ libvtv/configure.ac	(Arbeitskopie)
+@@ -122,6 +122,7 @@ AC_CHECK_TOOL(RANLIB, ranlib, :)
+ # Configure libtool
+ AC_LIBTOOL_DLOPEN
+ AM_PROG_LIBTOOL
++ACX_LT_HOST_FLAGS
+ AC_SUBST(enable_shared)
+ AC_SUBST(enable_static)
+ 
+@@ -155,4 +156,15 @@ _EOF
+ ])
+ fi
+ 
++case "$target_os" in
++  cygwin*|mingw32*)
++    vtv_cygmin="yes"
++    ;;
++  *)
++    vtv_cygmin="no"
++    ;;
++esac
++
++AM_CONDITIONAL(VTV_CYGMIN, test $vtv_cygmin = yes)
++
+ AC_OUTPUT
+Index: libvtv/configure.tgt
+===================================================================
+--- libvtv/configure.tgt	(Revision 214408)
++++ libvtv/configure.tgt	(Arbeitskopie)
+@@ -26,6 +26,12 @@ case "${target}" in
+   x86_64-*-linux* | i?86-*-linux*)
+ 	VTV_SUPPORTED=yes
+ 	;;
++  x86_64-*-cygwin* | i?86-*-cygwin*)
++	VTV_SUPPORTED=yes
++	;;
++  x86_64-*-mingw* | i?86-*-mingw*)
++	VTV_SUPPORTED=yes
++	;;
+   powerpc*-*-linux*)
+ 	;;
+   sparc*-*-linux*)
+Index: libvtv/vtv_fail.cc
+===================================================================
+--- libvtv/vtv_fail.cc	(Revision 214408)
++++ libvtv/vtv_fail.cc	(Arbeitskopie)
+@@ -46,7 +46,11 @@
+ #include <stdlib.h>
+ #include <stdio.h>
+ #include <string.h>
++
++#if !defined (__CYGWIN__) && !defined (__MINGW32__)
+ #include <execinfo.h>
++#endif
++
+ #include <unistd.h>
+ 
+ #include "vtv_utils.h"
+@@ -102,8 +106,10 @@ log_error_message (const char *log_msg,
+     {
+ #define STACK_DEPTH 20
+       void *callers[STACK_DEPTH];
++#if !defined (__CYGWIN__) && !defined (__MINGW32__)
+       int actual_depth = backtrace (callers, STACK_DEPTH);
+       backtrace_symbols_fd (callers, actual_depth, vtv_failures_log_fd);
++#endif
+     }
+ }
+ 
+Index: libvtv/vtv_malloc.cc
+===================================================================
+--- libvtv/vtv_malloc.cc	(Revision 214408)
++++ libvtv/vtv_malloc.cc	(Arbeitskopie)
+@@ -33,7 +33,11 @@
+ 
+ #include <stdlib.h>
+ #include <unistd.h>
++#if defined (__CYGWIN__) || defined (__MINGW32__)
++#include <windows.h>
++#else
+ #include <sys/mman.h>
++#endif
+ #include <sys/types.h>
+ #include <sys/stat.h>
+ #include <fcntl.h>
+@@ -62,6 +66,18 @@ static void *current_chunk VTV_PROTECTED
+ static size_t current_chunk_size VTV_PROTECTED_VAR = 0;
+ static int malloc_initialized VTV_PROTECTED_VAR = 0;
+ 
++#if defined (__CYGWIN__) || defined (__MINGW32__)
++//sysconf(_SC_PAGE_SIZE) port
++long sysconf_SC_PAGE_SIZE()
++{
++  SYSTEM_INFO si;
++  GetSystemInfo(&si);
++  long pageSize = (long)si.dwPageSize;
++  return pageSize;
++  //return 4096; // standard usermode 32bit pagesize in bytes // FIXME
++}
++#endif
++
+ /* The function goes through and counts all the pages we have allocated
+    so far.  It returns the page count.  */
+ 
+@@ -162,8 +178,13 @@ obstack_chunk_alloc (size_t size)
+   VTV_DEBUG_ASSERT ((size & (VTV_PAGE_SIZE - 1)) == 0);
+   void *allocated;
+ 
++#if defined (__CYGWIN__) || defined (__MINGW32__)
++  if ((allocated = VirtualAlloc(NULL, size,  MEM_RESERVE|MEM_COMMIT,
++                         PAGE_READWRITE)) == 0)
++#else
+   if ((allocated = mmap (NULL, size, PROT_READ | PROT_WRITE,
+                          MAP_PRIVATE | MAP_ANONYMOUS,  -1, 0)) == 0)
++#endif
+     VTV_error ();
+ 
+   VTV_DEBUG_ASSERT (((unsigned long) allocated & (VTV_PAGE_SIZE - 1)) == 0);
+@@ -190,7 +211,11 @@ __vtv_malloc_init (void)
+   if (malloc_initialized)
+     return;
+ 
++#if defined (__CYGWIN__) || defined (__MINGW32__)
++  if (VTV_PAGE_SIZE != sysconf_SC_PAGE_SIZE())
++#else
+   if (VTV_PAGE_SIZE != sysconf (_SC_PAGE_SIZE))
++#endif
+     VTV_error ();
+ 
+   obstack_chunk_size (&vtv_obstack) = VTV_PAGE_SIZE;
+Index: libvtv/vtv_malloc.h
+===================================================================
+--- libvtv/vtv_malloc.h	(Revision 214408)
++++ libvtv/vtv_malloc.h	(Arbeitskopie)
+@@ -95,4 +95,11 @@ extern void __vtv_malloc_stats (void);
+ extern void __vtv_malloc_dump_stats (void);
+ extern int __vtv_count_mmapped_pages (void);
+ 
++#if defined (__CYGWIN__) || defined (__MINGW32__)
++extern "C" int mprotect (void *addr, int len, int prot);
++
++  #define PROT_READ 0x1
++  #define PROT_WRITE 0x2
++#endif
++
+ #endif /* vtv_malloc.h */
+Index: libvtv/vtv_map.h
+===================================================================
+--- libvtv/vtv_map.h	(Revision 214408)
++++ libvtv/vtv_map.h	(Arbeitskopie)
+@@ -26,7 +26,13 @@
+ #define _VTV_MAP_H 1
+ 
+ #include <string.h>
++
++#ifdef __MINGW32__
++#include <stdint.h>
++#include "vtv_utils.h"
++#else
+ #include <vtv_utils.h>
++#endif
+ 
+ inline uint64_t
+ load8bytes (const void *p)
+Index: libvtv/vtv_rts.cc
+===================================================================
+--- libvtv/vtv_rts.cc	(Revision 214408)
++++ libvtv/vtv_rts.cc	(Arbeitskopie)
+@@ -121,12 +121,20 @@
+ #include <stdlib.h>
+ #include <stdio.h>
+ #include <string.h>
++#if defined (__CYGWIN__) || defined (__MINGW32__)
++#include <windows.h>
++#include <winternl.h>
++#include <psapi.h>
++#else
+ #include <execinfo.h>
++#endif
+ 
+ #include <unistd.h>
++#if !defined (__CYGWIN__) && !defined (__MINGW32__)
+ #include <sys/mman.h>
+-#include <errno.h>
+ #include <link.h>
++#endif
++#include <errno.h>
+ #include <fcntl.h>
+ #include <limits.h>
+ 
+@@ -143,6 +151,13 @@
+ 
+ #include "vtv-change-permission.h"
+ 
++#if defined (__CYGWIN__) || defined (__MINGW32__)
++// porting: fix link error to libc
++void __fortify_fail (const char * msg){
++    OutputDebugString(msg);
++    abort();
++}
++#else
+ extern "C" {
+ 
+   /* __fortify_fail is a function in glibc that calls __libc_message,
+@@ -159,6 +174,7 @@ extern "C" {
+   extern void __fortify_fail (const char *) __attribute__((noreturn));
+ 
+ } /* extern "C" */
++#endif
+ 
+ /* The following variables are used only for debugging and performance
+    tuning purposes. Therefore they do not need to be "protected".
+@@ -313,10 +329,17 @@ typedef vtv_set_handle * vtv_set_handle_
+ 
+ struct sect_hdr_data
+ {
++#if defined (__CYGWIN__) || defined (__MINGW32__)
++  uintptr_t dlpi_addr;    /* The header address in the INFO record,
++                            passed in from dl_iterate_phdr.  */
++  uintptr_t mp_low;       /* Start address of the .vtable_map_vars
++                            section in memory.  */
++#else
+   ElfW (Addr) dlpi_addr; /* The header address in the INFO record,
+                             passed in from dl_iterate_phdr.  */
+   ElfW (Addr) mp_low;    /* Start address of the .vtable_map_vars
+                             section in memory.  */
++#endif
+   size_t mp_size;        /* Size of the .vtable_map_vars section in
+                             memory.  */
+ };
+@@ -336,8 +359,13 @@ unsigned int num_cache_entries VTV_PROTE
+    it returns the record for that entry; otherwise it returns
+    NULL.  */
+ 
++#if defined (__CYGWIN__) || defined (__MINGW32__)
++struct sect_hdr_data *
++search_cached_file_data (uintptr_t load_addr)
++#else
+ struct sect_hdr_data *
+ search_cached_file_data (ElfW (Addr) load_addr)
++#endif
+ {
+   unsigned int i;
+   for (i = 0; i < num_cache_entries; ++i)
+@@ -401,6 +429,130 @@ log_memory_protection_data (char *messag
+   __vtv_add_to_log (log_fd, "%s", message);
+ }
+ 
++#if defined (__CYGWIN__) || defined (__MINGW32__)
++static void
++read_section_offset_and_length (char *name,
++                                uintptr_t addr,
++                                const char *sect_name,
++                                int mprotect_flags,
++                                off_t *sect_offset,
++                                WORD *sect_len)
++{
++  bool found = false;
++  struct sect_hdr_data *cached_data = NULL;
++
++  /* Check to see if we already have the data for this file.  */
++  cached_data = search_cached_file_data (addr);
++
++  if (cached_data)
++    {
++      *sect_offset = cached_data->mp_low;
++      *sect_len = cached_data->mp_size;
++      return;
++    }
++
++  // check for DOS Header magic bytes
++  if (*(WORD *)addr == 0x5A4D)
++    {
++      int name_len = strlen (sect_name);
++      int fd = -1;
++
++      /* Attempt to open the binary file on disk.  */
++      if (strlen (name) == 0)
++        {
++          return;
++        }
++      else
++        fd = open (name, O_RDONLY | O_BINARY);
++
++      if (fd != -1)
++        {
++          /* Find the section header information in memory.  */
++          PIMAGE_DOS_HEADER pDosHeader = (PIMAGE_DOS_HEADER)addr;
++          PIMAGE_NT_HEADERS pNtHeaders = (PIMAGE_NT_HEADERS)((char *)addr
++                                          + pDosHeader->e_lfanew);
++          PIMAGE_FILE_HEADER pFileHeader = &pNtHeaders->FileHeader;
++
++          DWORD PointerToStringTable = pFileHeader->PointerToSymbolTable
++                                        + (pFileHeader->NumberOfSymbols*0x12);
++
++          PIMAGE_SECTION_HEADER sect_hdr = 
++            (PIMAGE_SECTION_HEADER)((char *)&pNtHeaders->OptionalHeader
++                                       + pFileHeader->SizeOfOptionalHeader);
++
++          /* Loop through all the section headers, looking for one whose
++             name is ".vtable_map_vars".  */
++
++          for (int i = 0; i < pFileHeader->NumberOfSections && !found; ++i)
++            {
++              char header_name[64];
++
++              /* Check if we have to get the section name from the COFF string
++                 table. */
++              if (sect_hdr[i].Name[0] == '/')
++                {
++                  if (atoi((const char*)sect_hdr[i].Name+1) == 0)
++                    {
++                      continue;
++                    }
++
++                  off_t name_offset = PointerToStringTable
++                                       + atoi((const char*)sect_hdr[i].Name+1);
++
++                  size_t bytes_read = ReadFromOffset (fd, &header_name, 64,
++                                                      name_offset);
++
++                  VTV_ASSERT (bytes_read > 0);
++                }
++              else
++                {
++                  memcpy (&header_name, sect_hdr[i].Name,
++                          sizeof (sect_hdr[i].Name));
++                }
++
++              if (memcmp (header_name, sect_name, name_len) == 0)
++                {
++                  /* We found the section; get its load offset and
++                     size.  */
++                  *sect_offset = sect_hdr[i].VirtualAddress;
++      if (sect_hdr[i].Misc.VirtualSize % VTV_PAGE_SIZE != 0)
++        *sect_len = sect_hdr[i].Misc.VirtualSize + VTV_PAGE_SIZE
++                     - (sect_hdr[i].Misc.VirtualSize % VTV_PAGE_SIZE);
++      else
++        *sect_len = sect_hdr[i].Misc.VirtualSize;
++                  found = true;
++                }
++            }
++          close (fd);
++        }
++    }
++
++  if (*sect_offset != 0 && *sect_len != 0)
++    {
++      /* Calculate the page location in memory, making sure the
++         address is page-aligned.  */
++      uintptr_t start_addr = addr + *sect_offset;
++      *sect_offset = start_addr & ~(VTV_PAGE_SIZE - 1);
++      *sect_len = *sect_len - 1;
++
++      /* Since we got this far, we must not have found these pages in
++         the cache, so add them to it.  NOTE: We could get here either
++         while making everything read-only or while making everything
++         read-write.  We will only update the cache if we get here on
++         a read-write (to make absolutely sure the cache is writable
++         -- also the read-write pass should come before the read-only
++         pass).  */
++      if ((mprotect_flags & PROT_WRITE)
++          && num_cache_entries < MAX_ENTRIES)
++        {
++          vtv_sect_info_cache[num_cache_entries].dlpi_addr = addr;
++          vtv_sect_info_cache[num_cache_entries].mp_low = *sect_offset;
++          vtv_sect_info_cache[num_cache_entries].mp_size = *sect_len;
++          num_cache_entries++;
++        }
++    }
++}
++#else
+ static void
+ read_section_offset_and_length (struct dl_phdr_info *info,
+                                 const char *sect_name,
+@@ -547,7 +699,125 @@ read_section_offset_and_length (struct d
+         }
+     }
+ }
++#endif
++
++#if defined (__CYGWIN__) || defined (__MINGW32__)
++/* This function is used to iterate over all loaded modules and searches
++   for a section called ".vtable_map_vars". The only interaction with 
++   the binary file on disk of the module is to read section names in the
++   COFF string table. If the module contains a ".vtable_map_vars" section,
++   read section offset and size from the section header of the loaded module.
++   Call 'mprotect' on those pages, setting the protection either to
++   read-only or read-write, depending on what's in data.
++   The calls to change the protection occur in vtv_unprotect_vtable_vars 
++   and vtv_protect_vtable_vars.  */
++
++static int
++iterate_modules (void *data)
++{
++  int * mprotect_flags = (int *) data;
++  off_t map_sect_offset = 0;
++  WORD map_sect_len = 0;
++  char buffer[1024];
++  const char *map_sect_name = VTV_PROTECTED_VARS_SECTION;
++  HMODULE hMods[1024];
++  HANDLE hProcess;
++  DWORD cbNeeded;
++
++  hProcess = GetCurrentProcess ();
++
++  if (NULL == hProcess)
++    return 0;
++
++  if (EnumProcessModules (hProcess, hMods, sizeof (hMods), &cbNeeded))
++    {
++      /* Iterate over all loaded modules. */
++      for (unsigned int i = 0; i < (cbNeeded / sizeof (HMODULE)); i++)
++        {
++          char szModName[MAX_PATH];
+ 
++          if (GetModuleFileNameExA (hProcess, hMods[i], szModName,
++                        sizeof (szModName)))
++            {
++              map_sect_offset = 0;
++              map_sect_len = 0;
++              read_section_offset_and_length (szModName,
++                                              (uintptr_t) hMods[i],
++                                              map_sect_name, 
++                                              *mprotect_flags,
++                                              &map_sect_offset,
++                                              &map_sect_len);
++
++              if (debug_functions)
++                {
++                  snprintf (buffer, sizeof(buffer),
++                "  Looking at load module %s to change permissions to %s\n",
++                szModName,
++                (*mprotect_flags & PROT_WRITE) ? "READ/WRITE" : "READ-ONLY");
++                  log_memory_protection_data (buffer);
++                }
++
++              /* See if we actually found the section.  */
++              if (map_sect_offset && map_sect_len)
++                {
++                  unsigned long long start;
++                  int result;
++
++                  if (debug_functions)
++                    {
++                      snprintf (buffer, sizeof (buffer),
++                                "  (%s): Protecting %p to %p\n",
++                                szModName,
++                                (void *) map_sect_offset,
++                                (void *) (map_sect_offset + map_sect_len));
++                      log_memory_protection_data (buffer);
++                    }
++
++                  /* Change the protections on the pages for the section.  */
++
++                  start = get_cycle_count ();
++                  result = mprotect ((void *) map_sect_offset, map_sect_len,
++                                     *mprotect_flags);
++                  accumulate_cycle_count (&mprotect_cycles, start);
++                  if (result == -1)
++                    {
++                      if (debug_functions)
++                        {
++                          snprintf (buffer, sizeof (buffer),
++                                    "Failed called to mprotect for %s error: ",
++                                    (*mprotect_flags & PROT_WRITE) ?
++                                    "READ/WRITE" : "READ-ONLY");
++                          log_memory_protection_data (buffer);
++                          perror(NULL);
++                        }
++                      VTV_error();
++                    }
++                  else
++                    {
++                      if (debug_functions)
++                       {
++                          snprintf (buffer, sizeof (buffer),
++                                    "mprotect'ed range [%p, %p]\n",
++                                    (void *) map_sect_offset,
++                                    (char *) map_sect_offset + map_sect_len);
++                          log_memory_protection_data (buffer);
++                        }
++                    }
++                  increment_num_calls (&num_calls_to_mprotect);
++                  /* num_pages_protected += (map_sect_len + VTV_PAGE_SIZE - 1) 
++                                            / VTV_PAGE_SIZE; */
++                  num_pages_protected += (map_sect_len + 4096 - 1) / 4096;
++                  continue;
++                }
++            }
++        }
++    }
++
++    CloseHandle(hProcess);
++
++  return 0;
++}
++#else
+ /* This is the callback function used by dl_iterate_phdr (which is
+    called from vtv_unprotect_vtable_vars and vtv_protect_vtable_vars).
+    It attempts to find the binary file on disk for the INFO record
+@@ -652,6 +922,7 @@ dl_iterate_phdr_callback (struct dl_phdr
+ 
+   return 0;
+ }
++#endif
+ 
+ /* This function explicitly changes the protection (read-only or read-write)
+    on the vtv_sect_info_cache, which is used for speeding up look ups in the
+@@ -678,7 +949,7 @@ change_protections_on_phdr_cache (int pr
+   char * low_address = (char *) &(vtv_sect_info_cache);
+   size_t cache_size = MAX_ENTRIES * sizeof (struct sect_hdr_data);
+ 
+-  low_address = (char *) ((unsigned long) low_address & ~(VTV_PAGE_SIZE - 1));
++  low_address = (char *) ((uintptr_t) low_address & ~(VTV_PAGE_SIZE - 1));
+   
+   if (mprotect ((void *) low_address, cache_size, protection_flag) == -1)
+     VTV_error ();
+@@ -695,7 +966,11 @@ vtv_unprotect_vtable_vars (void)
+ 
+   mprotect_flags = PROT_READ | PROT_WRITE;
+   change_protections_on_phdr_cache (mprotect_flags);
++#if defined (__CYGWIN__) || defined (__MINGW32__)
++  iterate_modules ((void *) &mprotect_flags);
++#else
+   dl_iterate_phdr (dl_iterate_phdr_callback, (void *) &mprotect_flags);
++#endif
+ }
+ 
+ /* Protect all the vtable map vars and other side data that is used
+@@ -708,7 +983,11 @@ vtv_protect_vtable_vars (void)
+   int mprotect_flags;
+ 
+   mprotect_flags = PROT_READ;
++#if defined (__CYGWIN__) || defined (__MINGW32__)
++  iterate_modules ((void *) &mprotect_flags);
++#else
+   dl_iterate_phdr (dl_iterate_phdr_callback, (void *) &mprotect_flags);
++#endif
+   change_protections_on_phdr_cache (mprotect_flags);
+ }
+ 
+@@ -868,7 +1147,7 @@ const unsigned long SET_HANDLE_HANDLE_BI
+ static inline bool
+ is_set_handle_handle (void * ptr)
+ {
+-  return ((unsigned long) ptr & SET_HANDLE_HANDLE_BIT)
++  return ((uintptr_t) ptr & SET_HANDLE_HANDLE_BIT)
+                                                       == SET_HANDLE_HANDLE_BIT;
+ }
+ 
+@@ -878,7 +1157,7 @@ is_set_handle_handle (void * ptr)
+ static inline vtv_set_handle * 
+ ptr_from_set_handle_handle (void * ptr)
+ {
+-  return (vtv_set_handle *) ((unsigned long) ptr & ~SET_HANDLE_HANDLE_BIT);
++  return (vtv_set_handle *) ((uintptr_t) ptr & ~SET_HANDLE_HANDLE_BIT);
+ }
+ 
+ /* Given a vtable map variable, PTR, this function sets the bit that
+@@ -888,7 +1167,7 @@ ptr_from_set_handle_handle (void * ptr)
+ static inline vtv_set_handle_handle
+ set_handle_handle (vtv_set_handle * ptr)
+ {
+-  return (vtv_set_handle_handle) ((unsigned long) ptr | SET_HANDLE_HANDLE_BIT);
++  return (vtv_set_handle_handle) ((uintptr_t) ptr | SET_HANDLE_HANDLE_BIT);
+ }
+ 
+ static inline void
+@@ -1362,6 +1641,7 @@ __VLTVerifyVtablePointer (void ** set_ha
+ 
+ static int page_count_2 = 0;
+ 
++#if !defined (__CYGWIN__) && !defined (__MINGW32__)
+ static int
+ dl_iterate_phdr_count_pages (struct dl_phdr_info *info,
+                              size_t unused __attribute__ ((__unused__)),
+@@ -1392,6 +1672,7 @@ dl_iterate_phdr_count_pages (struct dl_p
+ 
+   return 0;
+ }
++#endif
+ 
+ static void
+ count_all_pages (void)
+@@ -1401,7 +1682,11 @@ count_all_pages (void)
+   mprotect_flags = PROT_READ;
+   page_count_2 = 0;
+ 
++#if defined (__CYGWIN__) || defined (__MINGW32__)
++  iterate_modules ((void *) &mprotect_flags);
++#else
+   dl_iterate_phdr (dl_iterate_phdr_count_pages, (void *) &mprotect_flags);
++#endif
+   page_count_2 += __vtv_count_mmapped_pages ();
+ }
+ 
+Index: libvtv/vtv_utils.cc
+===================================================================
+--- libvtv/vtv_utils.cc	(Revision 214408)
++++ libvtv/vtv_utils.cc	(Arbeitskopie)
+@@ -33,7 +33,12 @@
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
++#if defined (__CYGWIN__) || defined (__MINGW32__)
++#include <windows.h>
++#else
+ #include <execinfo.h>
++#endif
++
+ #include <unistd.h>
+ #include <errno.h>
+ 
+@@ -64,8 +69,12 @@ __vtv_open_log (const char *name)
+ {
+   char log_name[1024];
+   char log_dir[512];
++#if defined (__CYGWIN__) || defined (__MINGW32__)
++  pid_t process_id = GetCurrentProcessId ();
++#else
+   uid_t user_id = getuid ();
+   pid_t process_id = getpid ();
++#endif
+   char *logs_prefix;
+   bool logs_dir_specified = false;
+   int fd = -1;
+@@ -74,14 +83,29 @@ __vtv_open_log (const char *name)
+   if (logs_prefix && strlen (logs_prefix) > 0)
+     {
+       logs_dir_specified = true;
++#ifdef __MINGW32__
++      mkdir (logs_prefix);
++#else
+       mkdir (logs_prefix, S_IRWXU);
++#endif
++
+       snprintf (log_dir, sizeof (log_dir), "%s/vtv_logs", logs_prefix);
+-      mkdir (log_dir, S_IRWXU);
+ 
++#ifdef __MINGW32__
++      mkdir (log_dir);
++#else
++      mkdir (log_dir, S_IRWXU);
++#endif
++#if defined (__CYGWIN__) || defined (__MINGW32__)
++      snprintf (log_name, sizeof (log_name), "%s_%d_%s", log_dir,
++		(unsigned) process_id, name);
++      fd = open (log_name, O_WRONLY | O_APPEND | O_CREAT, S_IRWXU);
++#else
+       snprintf (log_name, sizeof (log_name), "%s/%d_%d_%s", log_dir,
+ 		(unsigned) user_id, (unsigned) process_id, name);
+       fd = open (log_name, O_WRONLY | O_APPEND | O_CREAT | O_NOFOLLOW,
+ 		 S_IRWXU);
++#endif
+     }
+   else
+     fd = dup (2);
+@@ -125,8 +149,12 @@ __vtv_add_to_log (int log_file, const ch
+   va_list ap;
+   va_start (ap, format);
+ 
++#if defined (__CYGWIN__) || defined (__MINGW32__)
++  snprintf (output, sizeof (output), "VTV: PID=%ld ", GetCurrentProcessId ());
++#else
+   snprintf (output, sizeof (output), "VTV: PID=%d PPID=%d ", getpid (),
+             getppid ());
++#endif
+   vtv_log_write (log_file, output);
+   vsnprintf (output, sizeof (output), format, ap);
+   vtv_log_write (log_file, output);
+@@ -151,6 +179,7 @@ __vtv_log_verification_failure (const ch
+ 
+   __vtv_add_to_log (vtv_failures_log_fd, "%s", log_msg);
+ 
++#if !defined (__CYGWIN__) && !defined (__MINGW32__)
+   if (generate_backtrace)
+     {
+ #define STACK_DEPTH 20
+@@ -158,4 +187,5 @@ __vtv_log_verification_failure (const ch
+       int actual_depth = backtrace (callers, STACK_DEPTH);
+       backtrace_symbols_fd (callers, actual_depth, vtv_failures_log_fd);
+     }
++#endif
+ }

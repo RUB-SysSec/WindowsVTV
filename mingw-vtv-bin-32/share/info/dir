@@ -1,0 +1,49 @@
+This is the file .../info/dir, which contains the
+topmost node of the Info hierarchy, called (dir)Top.
+The first time you invoke Info you start off looking at this node.
+
+File: dir,	Node: Top	This is the top of the INFO tree
+
+  This (the Directory node) gives a menu of major topics.
+  Typing "q" exits, "?" lists all Info commands, "d" returns here,
+  "h" gives a primer for first-timers,
+  "mEmacs<Return>" visits the Emacs manual, etc.
+
+  In Emacs, you can click mouse button 2 on a menu item or cross reference
+  to select it.
+
+* Menu:
+
+GNU Libraries
+* libquadmath: (libquadmath).   GCC Quad-Precision Math Library
+
+Individual utilities
+* aot-compile: (gcj)Invoking aot-compile.       Compile bytecode to native and 
+                                                  generate databases.
+* gc-analyze: (gcj)Invoking gc-analyze.         Analyze Garbage Collector (GC) 
+                                                  memory dumps.
+* gcj-dbtool: (gcj)Invoking gcj-dbtool.         Tool for manipulating class 
+                                                  file databases.
+* gij: (gcj)Invoking gij.                       GNU interpreter for Java 
+                                                  bytecode
+* grmic: (gcj)Invoking grmic.                   Generate stubs for Remote 
+                                                  Method Invocation.
+* jcf-dump: (gcj)Invoking jcf-dump.             Print information about Java 
+                                                  class files
+* jv-convert: (gcj)Invoking jv-convert.         Convert file from one encoding 
+                                                  to another
+* rebuild-gcj-db: (gcj)Invoking rebuild-gcj-db. Merge the per-solib databases 
+                                                  made by aot-compile into one system-wide database.
+
+Software development
+* Cpp: (cpp).                   The GNU C preprocessor.
+* Cpplib: (cppinternals).       Cpplib internals.
+* Gcj: (gcj).                   Ahead-of-time compiler for the Java language
+* g++: (gcc).                   The GNU C++ compiler.
+* gcc: (gcc).                   The GNU Compiler Collection.
+* gccinstall: (gccinstall).     Installing the GNU Compiler Collection.
+* gccint: (gccint).             Internals of the GNU Compiler Collection.
+* gcov: (gcc) Gcov.             'gcov'--a test coverage program.
+* gcov-tool: (gcc) Gcov-tool.   'gcov-tool'--an offline gcda profile 
+                                  processing program.
+* gfortran: (gfortran).         The GNU Fortran Compiler.
