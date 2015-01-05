@@ -2,7 +2,7 @@ i686-w64-mingw32-vtv
 ====================
 
 * MinGW 32bit cross compiler with VTV support. Compiled on Arch Linux 64bit. It has to be used on a 64bit Linux distribution.
-* The patch introducing VTV for Cygwin/MinGW.
+* The patch introduces VTV for Cygwin/MinGW.
 * Changelog of the patch.
 * MinGW build instructions
 
@@ -52,7 +52,7 @@ MinGW can be used now to cross compile programs with VTV support.
 
 Compiling with MinGW Cross Compiler
 -----------------------------------
-The following files have to be extracted, since they exceeded GitHub's file size limit.
+An already built MinGW Cross Compiler is also available. The following files have to be extracted, since they exceeded GitHub's file size limit.
 * mingw-vtv-bin-32/libexec/gcc/i686-w64-mingw32/5.0.0/cc1.7z
 * mingw-vtv-bin-32/libexec/gcc/i686-w64-mingw32/5.0.0/cc1obj.7z
 * mingw-vtv-bin-32/libexec/gcc/i686-w64-mingw32/5.0.0/cc1plus.7z
@@ -60,16 +60,18 @@ The following files have to be extracted, since they exceeded GitHub's file size
 * mingw-vtv-bin-32/libexec/gcc/i686-w64-mingw32/5.0.0/jc1.7z
 * mingw-vtv-bin-32/libexec/gcc/i686-w64-mingw32/5.0.0/lto1.7z
 
+To compile files into Windows executables protected with VTV add the -fvtable-verify flag to the command line, e.g.:
 ```i686-w64-mingw32-g++ -fvtable-verify=std virtual_func_test_min_UAF.cpp```
 <br>
 ```i686-w64-mingw32-g++ -fvtable-verify=preinit virtual_func_test_min_UAF.cpp```
 <br>
-On Cygwin and MinGW it's set preinit=std. So they result in the same output.
+On Cygwin and MinGW preinit is set to std. So the resulting binaries are the same.
 
 Building Botan:<br>
+Get the [source](https://botan.randombit.net) and configure it:<br>
 ```python2 configure.py --cc=gcc --os=windows --cpu=i686```
 
-Then change in the resulting Makefile the following lines.
+Then change the following lines in the resulting Makefile: 
 
 ```CXX           = g++```
 to
