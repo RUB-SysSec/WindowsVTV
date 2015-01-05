@@ -60,7 +60,7 @@ An already built MinGW Cross Compiler is also available. The following files hav
 * mingw-vtv-bin-32/libexec/gcc/i686-w64-mingw32/5.0.0/jc1.7z
 * mingw-vtv-bin-32/libexec/gcc/i686-w64-mingw32/5.0.0/lto1.7z
 
-To compile files into Windows executables protected with VTV add the -fvtable-verify flag to the command line, e.g.:
+To compile files into Windows executables protected with VTV add the -fvtable-verify flag to the command line, e.g.:<br>
 ```i686-w64-mingw32-g++ -fvtable-verify=std virtual_func_test_min_UAF.cpp```
 <br>
 ```i686-w64-mingw32-g++ -fvtable-verify=preinit virtual_func_test_min_UAF.cpp```
