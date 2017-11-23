@@ -8,7 +8,7 @@ i686-w64-mingw32-vtv
 
 The Patch
 ---------
-The patch is currently under [review](https://gcc.gnu.org/ml/gcc-patches/2014-09/msg01572.html).
+~~The patch is currently under [review](https://gcc.gnu.org/ml/gcc-patches/2014-09/msg01572.html).~~ Update: the patch was merged into [GCC](https://github.com/gcc-mirror/gcc/commit/5be42fa921560bbdaa277e40df5346e650bf72a2) so applying the patch can be skipped.
 
 The patch can be applied the following way:
 * [Get the GCC source code from the GCC svn](https://gcc.gnu.org/wiki/SvnSetup). Use the following command in the folder which should contain the source code: 
